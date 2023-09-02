@@ -43,9 +43,18 @@ pub fn main() !void {
             if (c_file == null) return error.FailedToOpenFile;
             defer _ = if (c_file) |f| std.c.fclose(f);
 
+            const real_c_file = @as(?*c.FILE, @ptrCast(@alignCast(c_file)));
+
             log.debug("open", .{});
-            var incoming_image = c.gdImageCreateFromWebp(@as(?*c.FILE, @ptrCast(@alignCast(c_file))));
+            var incoming_image = if (std.mem.endsWith(u8, arg, ".webp"))
+                c.gdImageCreateFromWebp(real_c_file)
+            else if (std.mem.endsWith(u8, arg, ".png"))
+                c.gdImageCreateFromPng(real_c_file)
+            else
+                // fallback to webp
+                c.gdImageCreateFromWebp(real_c_file);
             defer c.gdImageDestroy(incoming_image);
+            if (incoming_image == null) return error.NoImage;
 
             log.debug("alpha blend", .{});
             c.gdImageAlphaBlending(incoming_image, c.GD_TRUE);
