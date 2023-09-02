@@ -55,7 +55,7 @@ pub fn main() !void {
                 image,
                 incoming_image,
                 @mod(a, @as(c_int, 8)) * 128,
-                (a >> 3) * 128,
+                @divTrunc(a, 8) * 128,
                 0,
                 0,
                 128,
