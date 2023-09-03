@@ -6,6 +6,33 @@ const c = @cImport({
 
 const log = std.log.scoped(.montagd);
 pub extern "c" fn fdopen(fd: c_int) ?*c.FILE;
+pub extern "c" fn fileno(stream: ?*std.c.FILE) std.os.fd_t;
+
+const RIFF_HEADER = "RIFF";
+const JPEG_HEADER = "\xff\xd8\xff";
+const PNG_HEADER = "\x89\x50\x4e\x47\x0d\x0a\x1a\x0a";
+
+const ImageType = enum { PNG, JPEG, WEBP };
+
+pub fn imageTypeFromFile(file: std.fs.File) !ImageType {
+    var header_buffer: [16]u8 = undefined;
+
+    const read_bytes = try file.read(&header_buffer);
+    try file.seekTo(0);
+    const header = header_buffer[0..read_bytes];
+
+    const result: ImageType = if (std.mem.startsWith(u8, header, RIFF_HEADER))
+        .WEBP
+    else if (std.mem.startsWith(u8, header, JPEG_HEADER))
+        .JPEG
+    else if (std.mem.startsWith(u8, header, PNG_HEADER))
+        .PNG
+    else
+        return error.InvalidFormat;
+
+    log.debug("image type {}", .{result});
+    return result;
+}
 
 pub fn main() !void {
     var image = c.gdImageCreateTrueColor(1024, 512);
@@ -39,20 +66,26 @@ pub fn main() !void {
             //const c_file = fdopen(file.handle);
 
             const c_file = std.c.fopen(arg, "r");
+            // TODO check errno
 
-            if (c_file == null) return error.FailedToOpenFile;
+            if (c_file == null) {
+                log.err("failed to open {s}, got {}", .{ arg, std.c.getErrno(-1) });
+
+                return error.FailedToOpenFile;
+            }
             defer _ = if (c_file) |f| std.c.fclose(f);
 
             const real_c_file = @as(?*c.FILE, @ptrCast(@alignCast(c_file)));
 
-            log.debug("open", .{});
-            var incoming_image = if (std.mem.endsWith(u8, arg, ".webp"))
-                c.gdImageCreateFromWebp(real_c_file)
-            else if (std.mem.endsWith(u8, arg, ".png"))
-                c.gdImageCreateFromPng(real_c_file)
-            else
-                // fallback to webp
-                c.gdImageCreateFromWebp(real_c_file);
+            var file = std.fs.File{ .handle = fileno(c_file) };
+
+            log.debug("open (fd={d})", .{file.handle});
+            var incoming_image = switch (try imageTypeFromFile(file)) {
+                .WEBP => c.gdImageCreateFromWebp(real_c_file),
+                .JPEG => c.gdImageCreateFromJpeg(real_c_file),
+                .PNG => c.gdImageCreateFromPng(real_c_file),
+            };
+
             defer c.gdImageDestroy(incoming_image);
             if (incoming_image == null) return error.NoImage;
 
