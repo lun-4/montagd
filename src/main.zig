@@ -6,7 +6,7 @@ const c = @cImport({
 
 const log = std.log.scoped(.montagd);
 pub extern "c" fn fdopen(fd: c_int) ?*c.FILE;
-pub extern "c" fn fileno(stream: ?*std.c.FILE) std.os.fd_t;
+pub extern "c" fn fileno(stream: ?*std.c.FILE) std.c.fd_t;
 
 const RIFF_HEADER = "RIFF";
 const JPEG_HEADER = "\xff\xd8\xff";
@@ -35,7 +35,7 @@ pub fn imageTypeFromFile(file: std.fs.File) !ImageType {
 }
 
 pub fn main() !void {
-    var image = c.gdImageCreateTrueColor(1024, 512);
+    const image = c.gdImageCreateTrueColor(1024, 512);
     defer _ = c.gdImageDestroy(image);
 
     c.gdImageFill(image, 0, 0, c.gdImageColorAllocateAlpha(image, 0, 0, 0, 127));
@@ -69,7 +69,7 @@ pub fn main() !void {
             // TODO check errno
 
             if (c_file == null) {
-                log.err("failed to open {s}, got {}", .{ arg, std.c.getErrno(-1) });
+                log.err("failed to open {s}, got {}", .{ arg, std.posix.errno(-1) });
 
                 return error.FailedToOpenFile;
             }
@@ -77,10 +77,10 @@ pub fn main() !void {
 
             const real_c_file = @as(?*c.FILE, @ptrCast(@alignCast(c_file)));
 
-            var file = std.fs.File{ .handle = fileno(c_file) };
+            const file = std.fs.File{ .handle = fileno(c_file) };
 
             log.debug("open (fd={d})", .{file.handle});
-            var incoming_image = switch (try imageTypeFromFile(file)) {
+            const incoming_image = switch (try imageTypeFromFile(file)) {
                 .WEBP => c.gdImageCreateFromWebp(real_c_file),
                 .JPEG => c.gdImageCreateFromJpeg(real_c_file),
                 .PNG => c.gdImageCreateFromPng(real_c_file),
@@ -113,12 +113,12 @@ pub fn main() !void {
     c.gdImageSaveAlpha(image, c.GD_TRUE);
     log.debug("writing final file {?s}", .{target_file});
 
-    const c_file = std.c.fopen(target_file orelse return error.ExpectedLastArg, "w");
+    const c_file = std.c.fopen(target_file orelse return error.ExpectedLastArg, "wb");
 
     if (c_file == null) return error.FailLastArg;
     defer _ = if (c_file) |f| std.c.fclose(f);
 
     log.debug("open", .{});
 
-    c.gdImagePng(image, @as(?*c.FILE, @ptrCast(@alignCast(c_file))));
+    c.gdImagePngEx(image, @as(?*c.FILE, @ptrCast(@alignCast(c_file))), 0);
 }
