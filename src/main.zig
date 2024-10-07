@@ -92,19 +92,36 @@ pub fn main() !void {
             log.debug("alpha blend", .{});
             c.gdImageAlphaBlending(incoming_image, c.GD_TRUE);
 
-            log.debug("copy resample", .{});
-            c.gdImageCopyResampled(
-                image,
-                incoming_image,
-                @mod(a, @as(c_int, 8)) * 128,
-                @divTrunc(a, 8) * 128,
-                0,
-                0,
-                128,
-                128,
-                c.gdImageSX(incoming_image),
-                c.gdImageSY(incoming_image),
-            );
+            const incoming_x = c.gdImageSX(incoming_image);
+            const incoming_y = c.gdImageSY(incoming_image);
+            // new style of thumbnail is already 128x128 to prevent an unecessary resize
+            if (incoming_x == 128 and incoming_y == 128) {
+                log.debug("copy SHORTCIRCUIT!! 128X INPUT", .{});
+                c.gdImageCopy(
+                    image,
+                    incoming_image,
+                    @mod(a, @as(c_int, 8)) * 128,
+                    @divTrunc(a, 8) * 128,
+                    0,
+                    0,
+                    128,
+                    128,
+                );
+            } else {
+                log.debug("copy resample ({d}x{d})", .{ incoming_x, incoming_y });
+                c.gdImageCopyResampled(
+                    image,
+                    incoming_image,
+                    @mod(a, @as(c_int, 8)) * 128,
+                    @divTrunc(a, 8) * 128,
+                    0,
+                    0,
+                    128,
+                    128,
+                    incoming_x,
+                    incoming_y,
+                );
+            }
 
             a += 1;
         }
