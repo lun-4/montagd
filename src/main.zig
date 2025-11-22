@@ -66,8 +66,6 @@ pub fn main() !void {
             //const c_file = fdopen(file.handle);
 
             const c_file = std.c.fopen(arg, "r");
-            // TODO check errno
-
             if (c_file == null) {
                 log.err("failed to open {s}, got {}", .{ arg, std.posix.errno(-1) });
 
